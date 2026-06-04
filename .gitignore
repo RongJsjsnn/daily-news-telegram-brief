@@ -1,0 +1,6 @@
+news-push/.env
+news-push/.venv/
+news-push/output/
+news-push/logs/
+__pycache__/
+*.pyc
