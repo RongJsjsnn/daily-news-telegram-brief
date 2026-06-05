@@ -6,6 +6,87 @@ from config import SECTION_ORDER, SECTION_TITLES, Settings
 from models import NewsItem
 
 
+RESTAURANT_IMPACT_KEYWORDS = [
+    "消费政策",
+    "消费券",
+    "促消费",
+    "服务消费",
+    "消费趋势",
+    "消费者支出",
+    "食品安全",
+    "食品",
+    "农产品",
+    "粮食",
+    "猪肉",
+    "蔬菜",
+    "水产",
+    "油价",
+    "燃油",
+    "物流",
+    "供应链",
+    "外卖",
+    "外卖平台",
+    "AI商业",
+    "人工智能应用",
+    "人口",
+    "客流",
+    "旅游",
+    "餐饮",
+    "食材",
+]
+
+
+def _clean_text(text: str) -> str:
+    return " ".join((text or "").replace("\n", " ").split())
+
+
+def _trim_text(text: str, max_len: int = 120) -> str:
+    text = _clean_text(text).strip("，。；、. ")
+    if len(text) <= max_len:
+        return text
+    clipped = text[: max_len - 1]
+    for mark in ["。", "；", "，", "、", "."]:
+        index = clipped.rfind(mark)
+        if index >= max_len // 2:
+            clipped = clipped[:index]
+            break
+    return clipped.rstrip("，。；、. ")
+
+
+def _ensure_period(text: str) -> str:
+    text = text.rstrip("，；、. ")
+    if text.endswith(("。", "！", "？")):
+        return text
+    return f"{text}。"
+
+
+def _event_context(item: NewsItem) -> str:
+    text = f"{item.title} {item.summary}"
+    if any(k in text for k in ["就业", "GDP", "通胀", "利率", "油价", "消费者支出", "房地产", "经济增长"]):
+        return "原因多与宏观周期、价格压力和市场预期有关，当前进展以官方数据和机构跟踪为主。"
+    if any(k in text for k in ["美国", "欧盟", "俄罗斯", "联合国", "中东", "制裁", "关税"]):
+        return "背景是地缘政治、贸易规则和安全利益博弈，后续取决于相关国家谈判和政策执行。"
+    if any(k in text for k in ["国务院", "部委", "政策", "监管", "地方"]):
+        return "背景是政策部门希望稳增长、稳就业或规范行业秩序，当前重点在地方执行和配套落地。"
+    if any(k in text for k in ["AI", "人工智能", "芯片", "半导体", "大模型", "互联网"]):
+        return "背景是技术商业化和产业竞争加速，当前进展集中在产品落地、监管适配和企业投入。"
+    if any(k in text for k in RESTAURANT_IMPACT_KEYWORDS):
+        return "背景是消费需求、成本和供应链变化，当前影响仍需看价格、客流和平台政策后续走势。"
+    return "目前公开信息主要来自新闻源披露，后续影响仍需观察相关机构、企业或地方执行进展。"
+
+
+def _news_overview(item: NewsItem) -> str:
+    summary = _clean_text(item.summary)
+    if summary and summary != item.title:
+        base = summary
+    else:
+        base = f"{item.source} 报道称，{item.title}"
+    base = _trim_text(base, 76)
+    context = _event_context(item)
+    overview = f"{base}。{context}"
+    return _ensure_period(_trim_text(overview, 120))
+
+
 def _brief_summary(item: NewsItem) -> str:
     text = item.summary or item.title
     text = " ".join(text.replace("\n", " ").split())
@@ -53,9 +134,9 @@ def _great_power_logic(item: NewsItem) -> str:
 
 def _restaurant_impact(item: NewsItem) -> str:
     text = f"{item.title} {item.summary}"
-    if any(k in text for k in ["食品", "食材", "价格", "消费", "餐饮", "旅游", "外卖"]):
+    if any(k in text for k in RESTAURANT_IMPACT_KEYWORDS):
         return "餐饮业需要重点关注食材成本、客流恢复和外卖平台费用变化。对万州餐饮尤其是万州烤鱼而言，稳定鱼类供应、优化套餐客单价、借助川渝餐饮流量做品牌化，会比单纯打折更重要。"
-    return "对餐饮业的直接影响有限，但会通过居民收入预期和消费信心间接传导。万州餐饮应继续控制食材损耗、提升外卖转化，并围绕万州烤鱼和川渝风味做标准化与本地品牌传播。"
+    return "本条新闻对餐饮行业影响有限。"
 
 
 def _core_judgement(item: NewsItem) -> str:
@@ -71,7 +152,10 @@ def _core_judgement(item: NewsItem) -> str:
 def _render_item(item: NewsItem) -> str:
     return f"""## 【{item.rating}评级】{item.title}
 
-简述：{_brief_summary(item)} {item.url}
+新闻概述：
+{_news_overview(item)}
+
+链接：{item.url}
 
 对普通人的影响：
 {_common_people_impact(item)}

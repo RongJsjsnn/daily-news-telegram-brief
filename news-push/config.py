@@ -147,8 +147,9 @@ class Settings:
     request_timeout: int = _get_int("REQUEST_TIMEOUT", 12)
     request_retries: int = _get_int("REQUEST_RETRIES", 3)
     retry_backoff_seconds: float = _get_float("RETRY_BACKOFF_SECONDS", 1.5)
-    notifier: str = os.getenv("NOTIFIER", "file").lower()
+    notifier: str = os.getenv("NOTIFIER", "smtp").lower()
     output_dir: Path = Path(os.getenv("OUTPUT_DIR", str(BASE_DIR / "output")))
+    archive_dir: Path = Path(os.getenv("ARCHIVE_DIR", str(BASE_DIR / "news")))
     log_dir: Path = Path(os.getenv("LOG_DIR", str(BASE_DIR / "logs")))
     military_filter_enabled: bool = _get_bool("MILITARY_FILTER_ENABLED", True)
     rss_feeds: list[dict[str, Any]] = field(
@@ -158,13 +159,13 @@ class Settings:
     wecom_webhook_url: str = os.getenv("WECOM_WEBHOOK_URL", "")
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID", "")
-    smtp_host: str = os.getenv("SMTP_HOST", "")
-    smtp_port: int = _get_int("SMTP_PORT", 465)
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
+    smtp_port: int = _get_int("SMTP_PORT", 587)
     smtp_user: str = os.getenv("SMTP_USER", "")
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from: str = os.getenv("SMTP_FROM", "")
-    smtp_to: str = os.getenv("SMTP_TO", "")
-    smtp_use_ssl: bool = _get_bool("SMTP_USE_SSL", True)
+    smtp_to: str = os.getenv("SMTP_TO", "chenqiusong123@outlook.com")
+    smtp_use_ssl: bool = _get_bool("SMTP_USE_SSL", False)
 
 
 settings = Settings()

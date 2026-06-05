@@ -1,123 +1,105 @@
-name: Daily News Telegram Brief
+name: Daily News Email Brief
 
 on:
   schedule:
     - cron: "0 0 * * 1-5"
   workflow_dispatch:
 
+concurrency:
+  group: daily-news-email-brief
+  cancel-in-progress: false
+
 jobs:
   send-brief:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 140
     env:
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      CHAT_ID: ${{ secrets.CHAT_ID }}
+      NOTIFIER: smtp
+      SMTP_HOST: smtp.office365.com
+      SMTP_PORT: "587"
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      SMTP_TO: chenqiusong123@outlook.com
+      SMTP_USE_SSL: "false"
+      ARCHIVE_DIR: news
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: python -m pip install requests feedparser
+        run: python -m pip install -r news-push/requirements.txt
 
-      - name: Send Telegram brief
+      - name: Run news push with retries
+        id: push
+        working-directory: news-push
+        shell: bash
         run: |
-          python - <<'PY'
-          import datetime as dt
-          import email.utils
-          import os
-          import time
+          set -euo pipefail
+          attempts=3
+          attempt=1
+          report_dir="reports"
+          mkdir -p "$report_dir"
+          last_report=""
+          while [ "$attempt" -le "$attempts" ]; do
+            report_file="$report_dir/execution_report_attempt_${attempt}.md"
+            last_report="$report_file"
+            echo "Attempt $attempt/$attempts at $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            if python scripts/run_news_push_once.py \
+              --report-file "$report_file" \
+              --attempt "$attempt" \
+              --max-attempts "$attempts"; then
+              echo "report_file=$report_file" >> "$GITHUB_OUTPUT"
+              echo "attempt_count=$attempt" >> "$GITHUB_OUTPUT"
+              echo "push_status=success" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Attempt $attempt failed"
+            if [ "$attempt" -lt "$attempts" ]; then
+              echo "Sleeping 1800 seconds before retry"
+              sleep 1800
+            fi
+            attempt=$((attempt + 1))
+          done
+          echo "report_file=$last_report" >> "$GITHUB_OUTPUT"
+          echo "attempt_count=$attempts" >> "$GITHUB_OUTPUT"
+          echo "push_status=failure" >> "$GITHUB_OUTPUT"
+          exit 1
 
-          import feedparser
-          import requests
+      - name: Publish execution report
+        if: always()
+        working-directory: news-push
+        run: |
+          {
+            echo "## Execution Report"
+            echo
+            if [ -f "${{ steps.push.outputs.report_file }}" ]; then
+              cat "${{ steps.push.outputs.report_file }}"
+            else
+              echo "No execution report generated."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          feeds = [
-              ("BBC", "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml", "international"),
-              ("CCTV China", "https://www.cctv.com/program/rss/02/01/index.xml", "domestic"),
-              ("CCTV World", "https://www.cctv.com/program/rss/02/02/index.xml", "international"),
-              ("CCTV Finance", "https://www.cctv.com/program/rss/02/04/index.xml", "economy"),
-              ("36Kr", "https://36kr.com/feed", "technology"),
-              ("Google Culture", "https://news.google.com/rss/search?q=%E6%96%87%E5%8C%96%20OR%20%E6%96%87%E6%97%85%20when%3A1d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", "culture"),
-              ("Google Restaurant", "https://news.google.com/rss/search?q=%E9%A4%90%E9%A5%AE%20OR%20%E9%A3%9F%E6%9D%90%20OR%20%E5%A4%96%E5%8D%96%20when%3A1d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans", "restaurant"),
-          ]
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-news-execution-${{ github.run_id }}
+          path: |
+            news-push/output/*_brief.md
+            news-push/news/*.md
+            news-push/logs/news_push.log
+            news-push/reports/execution_report_attempt_*.md
 
-          labels = {
-              "international": "\u56fd\u9645\u653f\u6cbb\u677f\u5757",
-              "domestic": "\u56fd\u5185\u65b0\u95fb\u677f\u5757",
-              "economy": "\u7ecf\u6d4e\u677f\u5757",
-              "technology": "\u79d1\u6280\u677f\u5757",
-              "culture": "\u6587\u5316\u677f\u5757",
-              "restaurant": "\u9910\u996e\u677f\u5757",
-          }
-          order = ["international", "domestic", "economy", "technology", "culture", "restaurant"]
-          military = ["\u519b\u4e8b", "\u519b\u6f14", "\u5bfc\u5f39", "\u6b66\u5668", "\u6218\u673a"]
-
-          now = dt.datetime.now(dt.timezone.utc)
-          cutoff = now - dt.timedelta(hours=24)
-          items = {k: [] for k in order}
-          seen = set()
-
-          for source, url, category in feeds:
-              try:
-                  parsed = feedparser.parse(url)
-              except Exception:
-                  continue
-              for entry in parsed.entries[:80]:
-                  title = " ".join(getattr(entry, "title", "").split())
-                  link = getattr(entry, "link", "")
-                  if not title or not link or title in seen:
-                      continue
-                  seen.add(title)
-                  if any(w in title for w in military):
-                      continue
-                  published = getattr(entry, "published", "") or getattr(entry, "updated", "")
-                  try:
-                      published_at = email.utils.parsedate_to_datetime(published).astimezone(dt.timezone.utc)
-                  except Exception:
-                      published_at = now
-                  if published_at < cutoff:
-                      continue
-                  score = 100 - min((now - published_at).total_seconds() / 3600, 24)
-                  items[category].append((score, title, link, source))
-
-          today = (dt.datetime.utcnow() + dt.timedelta(hours=8)).strftime("%Y-%m-%d")
-          lines = [f"# \u6bcf\u65e5\u6218\u7565\u65b0\u95fb\u7b80\u62a5 {today}", ""]
-          for category in order:
-              lines += [f"# {labels[category]}", ""]
-              picked = sorted(items[category], reverse=True)[:3]
-              if not picked:
-                  lines += ["\u8fd124\u5c0f\u65f6\u672a\u6293\u53d6\u5230\u8db3\u591f\u53ef\u9760\u7684\u76f8\u5173\u65b0\u95fb\u3002", ""]
-                  continue
-              for _, title, link, source in picked:
-                  lines += [
-                      f"## \u3010B\u8bc4\u7ea7\u3011{title}",
-                      "",
-                      f"\u7b80\u8ff0\uff1a\u8fd9\u662f\u8fd124\u5c0f\u65f6\u5185\u7684\u91cd\u8981\u4fe1\u53f7\uff0c\u6765\u6e90\uff1a{source}\u3002 {link}",
-                      "",
-                      "\u5bf9\u666e\u901a\u4eba\u7684\u5f71\u54cd\uff1a\u4e3b\u8981\u4f53\u73b0\u5728\u5c31\u4e1a\u4fe1\u5fc3\u3001\u6d88\u8d39\u9884\u671f\u548c\u751f\u6d3b\u6210\u672c\u4e0a\u3002\u5efa\u8bae\u5173\u6ce8\u6536\u5165\u7a33\u5b9a\u6027\u548c\u5bb6\u5ead\u652f\u51fa\u7ed3\u6784\u53d8\u5316\u3002",
-                      "",
-                      "\u5bf9\u4e2d\u56fd\u7ecf\u6d4e\u5f71\u54cd\uff1a\u9700\u89c2\u5bdf\u5176\u5bf9\u4ea7\u4e1a\u94fe\u3001\u6d88\u8d39\u3001\u51fa\u53e3\u548c\u5c31\u4e1a\u7684\u8fde\u9501\u53cd\u5e94\u3002\u82e5\u5f62\u6210\u653f\u7b56\u8ddf\u8fdb\uff0c\u5f71\u54cd\u4f1a\u66f4\u660e\u663e\u3002",
-                      "",
-                      "\u672a\u6765\u534a\u5e74\u9884\u6d4b\uff1a\u4e8b\u4ef6\u5c06\u4ece\u65b0\u95fb\u70ed\u5ea6\u8f6c\u5411\u653f\u7b56\u3001\u8d44\u6e90\u548c\u5e02\u573a\u9884\u671f\u7684\u91cd\u65b0\u5b9a\u4ef7\u3002",
-                      "",
-                      "\u5927\u56fd\u535a\u5f08\u903b\u8f91\uff1a\u82e5\u6d89\u53ca\u5168\u7403\u89c4\u5219\u3001\u4f9b\u5e94\u94fe\u6216\u6280\u672f\u51c6\u5165\uff0c\u9700\u6309\u4e2d\u7f8e\u3001\u6b27\u7f8e\u548c\u5168\u7403\u5357\u65b9\u7684\u529b\u91cf\u5173\u7cfb\u6765\u7406\u89e3\uff1b\u5426\u5219\u672c\u6761\u65b0\u95fb\u5927\u56fd\u535a\u5f08\u5c5e\u6027\u8f83\u5f31\u3002",
-                      "",
-                      "\u5bf9\u9910\u996e\u4e1a\u5f71\u54cd\uff0c\u5c24\u5176\u4e07\u5dde\u9910\u996e\uff1a\u91cd\u70b9\u5173\u6ce8\u98df\u6750\u6210\u672c\u3001\u6d88\u8d39\u80fd\u529b\u3001\u5916\u5356\u6d41\u91cf\u548c\u533a\u57df\u54c1\u724c\u5316\u3002\u4e07\u5dde\u70e4\u9c7c\u4e0e\u5ddd\u6e1d\u9910\u996e\u5e94\u63d0\u5347\u6807\u51c6\u5316\u548c\u590d\u8d2d\u3002",
-                      "",
-                      "\u4e00\u53e5\u8bdd\u6838\u5fc3\u5224\u65ad\uff1a\u8fd9\u6761\u65b0\u95fb\u7684\u672c\u8d28\u662f\u73af\u5883\u53d8\u5316\u6b63\u5728\u91cd\u65b0\u5b9a\u4ef7\u98ce\u9669\u548c\u673a\u4f1a\u3002",
-                      "",
-                  ]
-
-          text = "\n".join(lines)
-          token = os.environ["BOT_TOKEN"]
-          chat_id = os.environ["CHAT_ID"]
-          for i in range(0, len(text), 3500):
-              r = requests.post(
-                  f"https://api.telegram.org/bot{token}/sendMessage",
-                  json={"chat_id": chat_id, "text": text[i:i+3500]},
-                  timeout=20,
-              )
-              r.raise_for_status()
-              time.sleep(0.5)
-          PY
+      - name: Fail with latest log excerpt
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f news-push/logs/news_push.log ]; then
+            tail -n 120 news-push/logs/news_push.log
+          fi
