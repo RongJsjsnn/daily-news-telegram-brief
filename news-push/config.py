@@ -159,12 +159,12 @@ class Settings:
     wecom_webhook_url: str = os.getenv("WECOM_WEBHOOK_URL", "")
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN", "")
     telegram_chat_id: str = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID", "")
-    smtp_host: str = os.getenv("SMTP_HOST", "smtp.office365.com")
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     smtp_port: int = _get_int("SMTP_PORT", 587)
     smtp_user: str = os.getenv("SMTP_USER", "")
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_from: str = os.getenv("SMTP_FROM", "")
-    smtp_to: str = os.getenv("SMTP_TO", "chenqiusong123@outlook.com")
+    smtp_to: str = os.getenv("SMTP_TO", "qiusongchen123@gmail.com")
     smtp_use_ssl: bool = _get_bool("SMTP_USE_SSL", False)
 
 
