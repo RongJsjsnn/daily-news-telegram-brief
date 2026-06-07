@@ -17,9 +17,9 @@ jobs:
       NOTIFIER: smtp
       SMTP_HOST: smtp.gmail.com
       SMTP_PORT: "587"
-      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_USER: qiusongchen123@gmail.com
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-      SMTP_FROM: ${{ secrets.SMTP_FROM }}
+      SMTP_FROM: qiusongchen123@gmail.com
       SMTP_TO: qiusongchen123@gmail.com
       SMTP_USE_SSL: "false"
       ARCHIVE_DIR: news
