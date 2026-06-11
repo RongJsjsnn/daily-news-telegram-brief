@@ -18,6 +18,7 @@ from classifier import prepare_news  # noqa: E402
 from fetchers import fetch_rss_news  # noqa: E402
 from summarizer import render_brief  # noqa: E402
 from notifier import NotificationError, get_notifier  # noqa: E402
+from text_utils import to_simplified  # noqa: E402
 
 
 def _mask_value(value: str) -> str:
@@ -85,7 +86,7 @@ def main() -> int:
         logging.info("开始生成每日战略新闻简报")
         raw_news = fetch_rss_news(settings, now)
         grouped_news = prepare_news(raw_news, settings, now)
-        brief = render_brief(grouped_news, settings, now)
+        brief = to_simplified(render_brief(grouped_news, settings, now))
         settings.output_dir.mkdir(parents=True, exist_ok=True)
         brief_path = settings.output_dir / f"{now.strftime('%Y%m%d_%H%M%S')}_brief.md"
         brief_path.write_text(brief, encoding="utf-8")
@@ -94,7 +95,7 @@ def main() -> int:
         archive_path = settings.archive_dir / f"{now.strftime('%Y-%m-%d')}.md"
         archive_path.write_text(brief, encoding="utf-8")
         payload["archive_path"] = str(archive_path)
-        title = f"【全球战略新闻简报】{now.strftime('%Y-%m-%d')}"
+        title = to_simplified(f"【全球战略新闻简报】{now.strftime('%Y-%m-%d')}")
         payload["subject"] = title
         result = get_notifier(settings).send(title, brief)
         payload["send_result"] = result

@@ -150,7 +150,10 @@ def _core_judgement(item: NewsItem) -> str:
 
 
 def _render_item(item: NewsItem) -> str:
-    return f"""## 【{item.rating}评级】{item.title}
+    published_at = item.published_at.strftime("%Y-%m-%d %H:%M")
+    return f"""### 【{item.rating}评级】{item.title}
+
+来源：{item.source} | 发布时间：{published_at}
 
 新闻概述：
 {_news_overview(item)}
@@ -187,7 +190,7 @@ def render_brief(grouped_news: dict[str, list[NewsItem]], settings: Settings, no
     ]
 
     for category in SECTION_ORDER:
-        lines.append(f"# {SECTION_TITLES[category]}")
+        lines.append(f"## {SECTION_TITLES[category]}")
         lines.append("")
         items = grouped_news.get(category, [])
         if not items:
@@ -195,8 +198,11 @@ def render_brief(grouped_news: dict[str, list[NewsItem]], settings: Settings, no
             lines.append("")
             continue
 
-        for item in items:
+        for index, item in enumerate(items):
             lines.append(_render_item(item).strip())
             lines.append("")
+            if index < len(items) - 1:
+                lines.append("---")
+                lines.append("")
 
     return "\n".join(lines).strip() + "\n"

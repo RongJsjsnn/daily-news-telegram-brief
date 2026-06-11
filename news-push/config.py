@@ -99,12 +99,12 @@ SECTION_ORDER = [
 ]
 
 SECTION_TITLES = {
-    "international": "国际政治板块",
-    "domestic": "国内新闻板块",
-    "economy": "经济板块",
-    "technology": "科技板块",
-    "culture": "文化板块",
-    "restaurant": "餐饮板块",
+    "international": "国际新闻",
+    "domestic": "中国新闻",
+    "economy": "财经新闻",
+    "technology": "科技新闻",
+    "culture": "文化新闻",
+    "restaurant": "餐饮新闻",
 }
 
 

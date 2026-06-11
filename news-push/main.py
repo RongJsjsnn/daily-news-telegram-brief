@@ -11,6 +11,7 @@ from fetchers import fetch_rss_news
 from notifier import get_notifier, send_alert
 from scheduler import start_scheduler
 from summarizer import render_brief
+from text_utils import to_simplified
 
 
 def setup_logging() -> None:
@@ -30,12 +31,12 @@ def run_once() -> str:
     logging.info("开始生成每日战略新闻简报")
     raw_news = fetch_rss_news(settings, now)
     grouped_news = prepare_news(raw_news, settings, now)
-    brief = render_brief(grouped_news, settings, now)
+    brief = to_simplified(render_brief(grouped_news, settings, now))
     archive_path = settings.archive_dir / f"{now.strftime('%Y-%m-%d')}.md"
     settings.archive_dir.mkdir(parents=True, exist_ok=True)
     archive_path.write_text(brief, encoding="utf-8")
     logging.info("Markdown 归档已写入 %s", archive_path)
-    title = f"【全球战略新闻简报】{now.strftime('%Y-%m-%d')}"
+    title = to_simplified(f"【全球战略新闻简报】{now.strftime('%Y-%m-%d')}")
     result = get_notifier(settings).send(title, brief)
     logging.info("推送结果：%s", result)
     logging.info("每日战略新闻简报生成并推送完成")

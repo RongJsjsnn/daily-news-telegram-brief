@@ -4,13 +4,15 @@ import logging
 import smtplib
 import time
 from datetime import datetime
-from email.mime.text import MIMEText
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Optional
 
 import requests
 
 from config import Settings
+from email_renderer import render_html_email
+from text_utils import to_simplified
 
 
 logger = logging.getLogger(__name__)
@@ -95,10 +97,14 @@ class SmtpNotifier(BaseNotifier):
 
     def send(self, title: str, content: str):
         sender = self.settings.smtp_from or self.settings.smtp_user
-        message = MIMEText(content, "plain", "utf-8")
+        title = to_simplified(title)
+        content = to_simplified(content)
+        message = EmailMessage()
         message["Subject"] = title
         message["From"] = sender
         message["To"] = self.settings.smtp_to
+        message.set_content(content, subtype="plain", charset="utf-8")
+        message.add_alternative(render_html_email(title, content), subtype="html", charset="utf-8")
 
         last_error: Optional[Exception] = None
         for attempt in range(1, self.max_attempts + 1):
